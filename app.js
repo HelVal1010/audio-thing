@@ -18,6 +18,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const flipCamBtn = document.getElementById('flipCamBtn');
   const hideUiBtn = document.getElementById('hideUiBtn');
   const restoreUiBtn = document.getElementById('restoreUiBtn');
+  const restoreFsBtn = document.getElementById('restoreFsBtn');
+  const fsBtn = document.getElementById('fsBtn');
   const overlayBtn = document.getElementById('overlayBtn');
   const collapseDiagBtn = document.getElementById('collapseDiagBtn');
   const diagCard = document.getElementById('diagCard');
@@ -58,8 +60,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       video.srcObject = stream;
       await video.play();
 
-      canvas.width = video.videoWidth || 1280;
-      canvas.height = video.videoHeight || 720;
+      updateDimensions();
 
       statusBadge.textContent = 'CAMERA READY';
       statusBadge.className = 'badge ready';
@@ -69,8 +70,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
         video.srcObject = stream;
         await video.play();
-        canvas.width = video.videoWidth || 1280;
-        canvas.height = video.videoHeight || 720;
+        updateDimensions();
         statusBadge.textContent = 'CAMERA READY';
         statusBadge.className = 'badge ready';
       } catch (e2) {
@@ -125,6 +125,124 @@ document.addEventListener('DOMContentLoaded', async () => {
     currentFacing = (currentFacing === 'environment' ? 'user' : 'environment');
     startCamera(currentFacing);
   };
+
+  // Dynamic Canvas Dimension & DPR Handling
+  function updateDimensions() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    if (!w || !h) return;
+
+    // devicePixelRatio capped at 2 for performance on mobile
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const targetW = Math.round(w * dpr);
+    const targetH = Math.round(h * dpr);
+
+    if (canvas.width !== targetW || canvas.height !== targetH) {
+      canvas.width = targetW;
+      canvas.height = targetH;
+    }
+  }
+
+  window.addEventListener('resize', updateDimensions);
+  window.addEventListener('orientationchange', () => {
+    setTimeout(updateDimensions, 100);
+    setTimeout(updateDimensions, 300);
+  });
+
+  // Center-crop video to cover destination canvas with 1:1 isotropic scaling (zero distortion)
+  function drawVideoCover(ctx, video, destW, destH) {
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    if (!vw || !vh || !destW || !destH) return;
+
+    const vAspect = vw / vh;
+    const dAspect = destW / destH;
+    let sx, sy, sw, sh;
+
+    if (dAspect > vAspect) {
+      // Screen/canvas is wider than camera stream: crop top & bottom
+      sw = vw;
+      sh = vw / dAspect;
+      sx = 0;
+      sy = (vh - sh) / 2;
+    } else {
+      // Screen/canvas is taller than camera stream: crop sides
+      sh = vh;
+      sw = vh * dAspect;
+      sx = (vw - sw) / 2;
+      sy = 0;
+    }
+
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, destW, destH);
+  }
+
+  // Fullscreen Mode Controls
+  function isFullscreen() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+  }
+
+  function updateFullscreenUI() {
+    const fs = isFullscreen();
+    const text = fs ? 'Exit FS' : 'Fullscreen';
+    const icon = fs ? '🗗' : '⛶';
+    if (fsBtn) {
+      fsBtn.innerHTML = `<span>${icon}</span> ${text}`;
+      fsBtn.title = fs ? 'Exit Fullscreen' : 'Enter Fullscreen';
+    }
+    if (restoreFsBtn) {
+      restoreFsBtn.innerHTML = `<span>${icon}</span>`;
+      restoreFsBtn.title = fs ? 'Exit Fullscreen' : 'Enter Fullscreen';
+    }
+  }
+
+  async function toggleFullscreen() {
+    try {
+      const doc = document;
+      const docEl = document.documentElement;
+
+      if (!isFullscreen()) {
+        if (docEl.requestFullscreen) {
+          await docEl.requestFullscreen();
+        } else if (docEl.webkitRequestFullscreen) {
+          await docEl.webkitRequestFullscreen();
+        } else if (docEl.msRequestFullscreen) {
+          await docEl.msRequestFullscreen();
+        }
+      } else {
+        if (doc.exitFullscreen) {
+          await doc.exitFullscreen();
+        } else if (doc.webkitExitFullscreen) {
+          await doc.webkitExitFullscreen();
+        } else if (doc.msExitFullscreen) {
+          await doc.msExitFullscreen();
+        }
+      }
+    } catch (err) {
+      console.warn('Fullscreen request error:', err);
+    }
+  }
+
+  if (fsBtn) {
+    fsBtn.onclick = (e) => {
+      e.stopPropagation();
+      toggleFullscreen();
+    };
+  }
+  if (restoreFsBtn) {
+    restoreFsBtn.onclick = (e) => {
+      e.stopPropagation();
+      toggleFullscreen();
+    };
+  }
+
+  document.addEventListener('fullscreenchange', () => {
+    updateFullscreenUI();
+    setTimeout(updateDimensions, 100);
+  });
+  document.addEventListener('webkitfullscreenchange', () => {
+    updateFullscreenUI();
+    setTimeout(updateDimensions, 100);
+  });
 
   // Clean Screen Recording Mode: Hide all UI boxes
   function hideUI() {
@@ -307,8 +425,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     frameCount++;
 
     if (video.readyState >= 2) {
-      // 1. Draw live camera frame
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      // 1. Draw live camera frame with isotropic center-crop cover (zero aspect distortion)
+      drawVideoCover(ctx, video, canvas.width, canvas.height);
 
       // 2. Run YOLO detection every 2nd frame in background
       if (tracker.modelLoaded && !isDetecting && frameCount % 2 === 0) {
