@@ -15,6 +15,16 @@ A 100% client-side web application designed to run directly on a smartphone (iPh
 
 ---
 
+## Clean Recording & Screen Capture Controls
+
+When recording a demo video (or screen recording on iOS/Android):
+
+* **👁️ Hide UI:** Fades out all HTML boxes, status cards, and action buttons so your phone screen is 100% clean. Tapping anywhere on the screen (or tapping the subtle `👁️ Show UI` pill in the top corner) immediately brings the UI back.
+* **📐 Lines On / Lines Off:** Toggles the AR tracking lines (fork/spoon/bowl overlays) on or off. You can record with the tracking lines visible or in a clean raw camera mode.
+* **— / + Minimize Card:** Collapses the explainability text box into a compact view while keeping the left/right tension meters visible.
+
+---
+
 ## Quick Start on GitHub Pages (Instant 2-Minute Setup)
 
 ### 1. Create a GitHub Repository

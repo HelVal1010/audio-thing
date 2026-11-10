@@ -16,7 +16,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   const recordTimer = document.getElementById('recordTimer');
   const audioBtn = document.getElementById('audioBtn');
   const flipCamBtn = document.getElementById('flipCamBtn');
-  const normalBtn = document.getElementById('normalBtn');
+  const hideUiBtn = document.getElementById('hideUiBtn');
+  const restoreUiBtn = document.getElementById('restoreUiBtn');
+  const overlayBtn = document.getElementById('overlayBtn');
+  const collapseDiagBtn = document.getElementById('collapseDiagBtn');
   const diagCard = document.getElementById('diagCard');
   const diagStatus = document.getElementById('diagStatus');
   const diagList = document.getElementById('diagList');
@@ -31,6 +34,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   let currentFacing = 'environment'; // Rear camera default for phone
   let isDetecting = false;
   let audioStarted = false;
+  let showOverlays = true;
 
   // 1. Initialize Camera
   async function startCamera(facing = 'environment') {
@@ -122,12 +126,45 @@ document.addEventListener('DOMContentLoaded', async () => {
     startCamera(currentFacing);
   };
 
-  normalBtn.onclick = () => {
-    // Allows resetting the perpendicular normal to vertical down (90°) or current tray
-    tracker.tray.perp_angle = 90.0;
-    tracker.tray.angle = 0.0;
-    normalBtn.style.transform = 'scale(0.95)';
-    setTimeout(() => { normalBtn.style.transform = ''; }, 150);
+  // Clean Screen Recording Mode: Hide all UI boxes
+  function hideUI() {
+    document.body.classList.add('ui-hidden');
+  }
+
+  function showUI() {
+    document.body.classList.remove('ui-hidden');
+  }
+
+  hideUiBtn.onclick = (e) => {
+    e.stopPropagation();
+    hideUI();
+  };
+
+  restoreUiBtn.onclick = (e) => {
+    e.stopPropagation();
+    showUI();
+  };
+
+  // Tapping viewport when UI is hidden toggles it back
+  canvas.addEventListener('click', () => {
+    if (document.body.classList.contains('ui-hidden')) {
+      showUI();
+    }
+  });
+
+  // Toggle AR detection lines on/off
+  overlayBtn.onclick = () => {
+    showOverlays = !showOverlays;
+    overlayBtn.innerHTML = showOverlays ? '<span>📐</span> Lines On' : '<span>📐</span> Lines Off';
+    overlayBtn.style.opacity = showOverlays ? '1' : '0.6';
+  };
+
+  // Collapse / Expand Diagnostics card
+  collapseDiagBtn.onclick = (e) => {
+    e.stopPropagation();
+    const isCollapsed = diagCard.classList.toggle('collapsed');
+    collapseDiagBtn.textContent = isCollapsed ? '+' : '—';
+    collapseDiagBtn.title = isCollapsed ? 'Expand card' : 'Minimize card';
   };
 
   // 4. Video Recording Handler
@@ -156,6 +193,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // 5. Drawing HUD Overlays onto Canvas
   function drawHUD(state) {
+    if (!showOverlays) return; // Completely clean camera view when toggled off!
     const W = canvas.width;
     const H = canvas.height;
 

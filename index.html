@@ -240,11 +240,70 @@
     }
     .diag-list li { margin-bottom: 3px; }
 
+    /* Clean View / Hidden UI mode for Screen Recording */
+    .top-hud, .bottom-hud {
+      transition: opacity 0.25s ease, transform 0.25s ease;
+    }
+
+    body.ui-hidden .top-hud {
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-25px);
+    }
+
+    body.ui-hidden .bottom-hud {
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(25px);
+    }
+
+    /* Minimal floating restore pill when UI is hidden */
+    #restoreUiBtn {
+      position: absolute;
+      top: env(safe-area-inset-top, 14px);
+      right: 14px;
+      z-index: 50;
+      background: rgba(14, 16, 23, 0.5);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 20px;
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.8);
+      display: none;
+      touch-action: manipulation;
+    }
+
+    body.ui-hidden #restoreUiBtn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Collapsible diagnostics card */
+    .diag-card.collapsed .diag-list {
+      display: none;
+    }
+    .diag-card.collapsed .meters-row {
+      margin-bottom: 0;
+    }
+
+    .icon-btn {
+      padding: 2px 8px;
+      font-size: 11px;
+      border-radius: 6px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid var(--line);
+      cursor: pointer;
+    }
+
     /* Action Toolbar */
     .actions {
       display: flex;
-      gap: 10px;
+      gap: 8px;
       justify-content: space-between;
+      flex-wrap: wrap;
     }
 
     button {
@@ -310,6 +369,9 @@
 </head>
 <body>
 
+  <!-- Floating Restore UI button when in clean screen-recording mode -->
+  <button id="restoreUiBtn"><span>👁️</span> Show UI</button>
+
   <!-- Fullscreen Camera Viewport -->
   <div id="viewport">
     <video id="cameraVideo" playsinline autoplay muted></video>
@@ -334,7 +396,10 @@
     <!-- Diagnostic Explainability Card -->
     <div id="diagCard" class="diag-card">
       <div class="diag-header">
-        <span class="diag-title">Real-Time Explainability</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="diag-title">Real-Time Explainability</span>
+          <button id="collapseDiagBtn" class="icon-btn" title="Minimize card">—</button>
+        </div>
         <span id="diagStatus" class="status-tag harmonious">HARMONIOUS</span>
       </div>
 
@@ -382,16 +447,20 @@
         <span id="recordTimer" style="font-variant-numeric: tabular-nums;" hidden>00:00</span>
       </button>
 
+      <button id="hideUiBtn" title="Hide all UI for clean screen recording">
+        <span>👁️</span> Hide UI
+      </button>
+
+      <button id="overlayBtn" title="Toggle tracking lines on/off">
+        <span>📐</span> Lines On
+      </button>
+
       <button id="audioBtn" class="muted">
         <span>🔇</span> Muted
       </button>
 
       <button id="flipCamBtn" title="Flip Camera">
         <span>🔄</span> Flip
-      </button>
-
-      <button id="normalBtn" title="Reset Tray Normal (90°)">
-        <span>📐</span> Normal
       </button>
     </div>
 
