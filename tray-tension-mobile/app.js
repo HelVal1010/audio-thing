@@ -1,0 +1,319 @@
+// Main Mobile Application Controller
+// Orchestrates camera, YOLO detection, Web Audio, HUD rendering, and video recording.
+
+document.addEventListener('DOMContentLoaded', async () => {
+  const video = document.getElementById('cameraVideo');
+  const canvas = document.getElementById('renderCanvas');
+  const ctx = canvas.getContext('2d');
+
+  // UI Elements
+  const statusBadge = document.getElementById('statusBadge');
+  const fpsTag = document.getElementById('fpsTag');
+  const inferTag = document.getElementById('inferTag');
+  const recordBtn = document.getElementById('recordBtn');
+  const recordDot = document.getElementById('recordDot');
+  const recordText = document.getElementById('recordText');
+  const recordTimer = document.getElementById('recordTimer');
+  const audioBtn = document.getElementById('audioBtn');
+  const flipCamBtn = document.getElementById('flipCamBtn');
+  const normalBtn = document.getElementById('normalBtn');
+  const diagCard = document.getElementById('diagCard');
+  const diagStatus = document.getElementById('diagStatus');
+  const diagList = document.getElementById('diagList');
+  const leftMeter = document.getElementById('leftMeter');
+  const rightMeter = document.getElementById('rightMeter');
+  const harmonyCircle = document.getElementById('harmonyCircle');
+
+  // Instances
+  const tracker = new TablewareTracker();
+  const recorder = new DemoRecorder();
+
+  let currentFacing = 'environment'; // Rear camera default for phone
+  let isDetecting = false;
+  let audioStarted = false;
+
+  // 1. Initialize Camera
+  async function startCamera(facing = 'environment') {
+    if (video.srcObject) {
+      video.srcObject.getTracks().forEach(t => t.stop());
+    }
+
+    statusBadge.textContent = 'CONNECTING CAMERA...';
+    statusBadge.className = 'badge loading';
+
+    try {
+      const constraints = {
+        video: {
+          facingMode: { ideal: facing },
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
+        audio: false
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      video.srcObject = stream;
+      await video.play();
+
+      canvas.width = video.videoWidth || 1280;
+      canvas.height = video.videoHeight || 720;
+
+      statusBadge.textContent = 'CAMERA READY';
+      statusBadge.className = 'badge ready';
+    } catch (err) {
+      console.warn('Environment camera failed, trying any camera:', err);
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        video.srcObject = stream;
+        await video.play();
+        canvas.width = video.videoWidth || 1280;
+        canvas.height = video.videoHeight || 720;
+        statusBadge.textContent = 'CAMERA READY';
+        statusBadge.className = 'badge ready';
+      } catch (e2) {
+        console.error('Camera access denied:', e2);
+        statusBadge.textContent = 'CAMERA DENIED';
+        statusBadge.className = 'badge error';
+      }
+    }
+  }
+
+  // 2. Initialize Model
+  async function initTracker() {
+    statusBadge.textContent = 'LOADING YOLO AI...';
+    statusBadge.className = 'badge loading';
+    await tracker.loadModel('./yolov8n.onnx');
+    if (tracker.modelLoaded) {
+      statusBadge.textContent = 'SYSTEM ACTIVE';
+      statusBadge.className = 'badge live';
+    } else {
+      statusBadge.textContent = 'MODEL ERROR';
+      statusBadge.className = 'badge error';
+    }
+  }
+
+  // 3. User interaction to start audio (browser policy)
+  function ensureAudio() {
+    if (!audioStarted) {
+      DeskAudio.start();
+      audioStarted = true;
+      audioBtn.classList.remove('muted');
+      audioBtn.innerHTML = '<span>🔊</span> Audio On';
+    }
+  }
+
+  window.addEventListener('click', ensureAudio, { once: true });
+  window.addEventListener('touchstart', ensureAudio, { once: true });
+
+  audioBtn.onclick = () => {
+    ensureAudio();
+    const muted = !DeskAudio.isMuted();
+    DeskAudio.setMuted(muted);
+    if (muted) {
+      audioBtn.classList.add('muted');
+      audioBtn.innerHTML = '<span>🔇</span> Muted';
+    } else {
+      audioBtn.classList.remove('muted');
+      audioBtn.innerHTML = '<span>🔊</span> Audio On';
+    }
+  };
+
+  flipCamBtn.onclick = () => {
+    currentFacing = (currentFacing === 'environment' ? 'user' : 'environment');
+    startCamera(currentFacing);
+  };
+
+  normalBtn.onclick = () => {
+    // Allows resetting the perpendicular normal to vertical down (90°) or current tray
+    tracker.tray.perp_angle = 90.0;
+    tracker.tray.angle = 0.0;
+    normalBtn.style.transform = 'scale(0.95)';
+    setTimeout(() => { normalBtn.style.transform = ''; }, 150);
+  };
+
+  // 4. Video Recording Handler
+  recorder.onTimerUpdate = timeStr => {
+    recordTimer.textContent = timeStr;
+  };
+
+  recordBtn.onclick = () => {
+    ensureAudio();
+    if (!recorder.isRecording()) {
+      const audioTrack = DeskAudio.getAudioTrack();
+      recorder.start(canvas, audioTrack);
+      recordBtn.classList.add('recording');
+      recordDot.classList.add('active');
+      recordText.textContent = 'Stop & Save';
+      recordTimer.hidden = false;
+    } else {
+      recorder.stop();
+      recordBtn.classList.remove('recording');
+      recordDot.classList.remove('active');
+      recordText.textContent = 'Record Demo';
+      recordTimer.hidden = true;
+      recordTimer.textContent = '00:00';
+    }
+  };
+
+  // 5. Drawing HUD Overlays onto Canvas
+  function drawHUD(state) {
+    const W = canvas.width;
+    const H = canvas.height;
+
+    // Draw Plate
+    if (state.plate.present) {
+      const px = state.plate.x;
+      const py = state.plate.y;
+      const pr = state.plate.r;
+      ctx.beginPath();
+      ctx.arc(px, py, pr, 0, 2 * Math.PI);
+      ctx.strokeStyle = '#5cc98a';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(92, 201, 138, 0.15)';
+      ctx.fill();
+
+      ctx.fillStyle = '#5cc98a';
+      ctx.font = 'bold 15px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText('Plate / Bowl', px, py + 5);
+    }
+
+    // Draw Tray Normal Reference
+    if (state.tray.has_perp) {
+      const cx = state.plate.present ? state.plate.x : W / 2;
+      const cy = state.plate.present ? state.plate.y : H / 2;
+      const rad = (state.tray.perp_angle * Math.PI) / 180.0;
+      const nx = cx + Math.cos(rad) * 110;
+      const ny = cy + Math.sin(rad) * 110;
+
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(nx, ny);
+      ctx.strokeStyle = '#f4c542';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      // Arrow head
+      const headlen = 14;
+      ctx.beginPath();
+      ctx.moveTo(nx, ny);
+      ctx.lineTo(nx - headlen * Math.cos(rad - Math.PI / 7), ny - headlen * Math.sin(rad - Math.PI / 7));
+      ctx.lineTo(nx - headlen * Math.cos(rad + Math.PI / 7), ny - headlen * Math.sin(rad + Math.PI / 7));
+      ctx.closePath();
+      ctx.fillStyle = '#f4c542';
+      ctx.fill();
+
+      ctx.fillStyle = '#f4c542';
+      ctx.font = 'bold 13px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText(`Target Normal: ${state.tray.perp_angle.toFixed(1)}°`, cx, cy - 12);
+    }
+
+    // Draw Fork
+    if (state.fork.present) {
+      const fx = state.fork.x;
+      const fy = state.fork.y;
+      const ang = (state.fork.angle * Math.PI) / 180.0;
+      const col = state.fork.aligned ? '#5cc98a' : '#e05a4f';
+
+      ctx.beginPath();
+      ctx.arc(fx, fy, 6, 0, 2 * Math.PI);
+      ctx.fillStyle = col;
+      ctx.fill();
+
+      // Long axis line
+      ctx.beginPath();
+      ctx.moveTo(fx - Math.cos(ang) * 60, fy - Math.sin(ang) * 60);
+      ctx.lineTo(fx + Math.cos(ang) * 60, fy + Math.sin(ang) * 60);
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 4;
+      ctx.stroke();
+
+      ctx.fillStyle = col;
+      ctx.font = 'bold 15px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText(`Fork: ${state.fork.delta_deg}° ${state.fork.aligned ? '✓' : '✗'}`, fx, fy - 22);
+    }
+
+    // Draw Spoon
+    if (state.spoon.present) {
+      const sx = state.spoon.x;
+      const sy = state.spoon.y;
+      const ang = (state.spoon.angle * Math.PI) / 180.0;
+      const col = state.spoon.aligned ? '#5cc98a' : '#e05a4f';
+
+      ctx.beginPath();
+      ctx.arc(sx, sy, 6, 0, 2 * Math.PI);
+      ctx.fillStyle = col;
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.moveTo(sx - Math.cos(ang) * 60, sy - Math.sin(ang) * 60);
+      ctx.lineTo(sx + Math.cos(ang) * 60, sy + Math.sin(ang) * 60);
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 4;
+      ctx.stroke();
+
+      ctx.fillStyle = col;
+      ctx.font = 'bold 15px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText(`Spoon: ${state.spoon.delta_deg}° ${state.spoon.aligned ? '✓' : '✗'}`, sx, sy - 22);
+    }
+  }
+
+  // 6. Main Animation & Inference Loop
+  let frameCount = 0;
+
+  async function loop() {
+    frameCount++;
+
+    if (video.readyState >= 2) {
+      // 1. Draw live camera frame
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      // 2. Run YOLO detection every 2nd frame in background
+      if (tracker.modelLoaded && !isDetecting && frameCount % 2 === 0) {
+        isDetecting = true;
+        tracker.detect(canvas, ctx).finally(() => {
+          isDetecting = false;
+        });
+      }
+
+      // 3. Get current state & draw overlays
+      const state = tracker.getState();
+      drawHUD(state);
+
+      // 4. Update Audio Engine
+      DeskAudio.update(state);
+
+      // 5. Update HTML UI Readouts
+      fpsTag.textContent = `${state.fps} FPS`;
+      inferTag.textContent = `${state.inferTime} ms`;
+
+      // Meters
+      leftMeter.style.width = `${state.e_left * 100}%`;
+      leftMeter.style.background = `hsl(${120 - 120 * state.e_left} 70% 50%)`;
+
+      rightMeter.style.width = `${state.e_right * 100}%`;
+      rightMeter.style.background = `hsl(${120 - 120 * state.e_right} 70% 50%)`;
+
+      // Harmony progress ring
+      const circ = 2 * Math.PI * 26; // r=26
+      const offset = circ * (1 - state.harmony);
+      harmonyCircle.style.strokeDashoffset = offset;
+
+      // Diagnostic Card
+      diagStatus.textContent = state.status;
+      diagStatus.className = `status-tag ${state.status.toLowerCase()}`;
+      diagList.innerHTML = state.reasons.map(r => `<li>${r}</li>`).join('');
+    }
+
+    requestAnimationFrame(loop);
+  }
+
+  // Start everything
+  await startCamera('environment');
+  await initTracker();
+  requestAnimationFrame(loop);
+});
