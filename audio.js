@@ -198,17 +198,47 @@ const DeskAudio = (() => {
   }
 
   function setFlip(f) {
-    flip = f;
+    flip = !!f;
+    if (ac) {
+      const now = ac.currentTime;
+      if (forkPan) forkPan.pan.setTargetAtTime(flip ? 0.85 : -0.85, now, 0.05);
+      if (spoonPan) spoonPan.pan.setTargetAtTime(flip ? -0.85 : 0.85, now, 0.05);
+    }
+  }
+
+  // Quick stereo test: plays left chime, then right chime
+  function testStereo() {
+    if (!ac) return;
+    const now = ac.currentTime;
+    const beep = (freq, panVal, delay) => {
+      const o = ac.createOscillator();
+      const g = ac.createGain();
+      const p = ac.createStereoPanner ? ac.createStereoPanner() : null;
+      o.frequency.value = freq;
+      if (p) p.pan.value = flip ? -panVal : panVal;
+      const t0 = now + delay;
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(0.25, t0 + 0.03);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.42);
+      o.connect(g);
+      if (p) { g.connect(p); p.connect(master); } else { g.connect(master); }
+      o.start(t0);
+      o.stop(t0 + 0.45);
+    };
+    beep(ROOT * 2, -0.9, 0.0); // Left channel beep (lower C4 pitch)
+    beep(ROOT * 3, 0.9, 0.4);  // Right channel beep (higher G4 pitch)
   }
 
   return {
     start,
     update,
     chime,
+    testStereo,
     setMuted,
     setFlip,
     running: () => !!ac && ac.state === 'running',
     isMuted: () => muted,
+    isFlipped: () => flip,
     getAudioTrack: () => streamDest && streamDest.stream.getAudioTracks().length ? streamDest.stream.getAudioTracks()[0] : null,
   };
 })();

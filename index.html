@@ -373,6 +373,12 @@
       background: rgba(255,255,255,0.06);
     }
 
+    #swapStereoBtn.swapped {
+      border-color: rgba(124, 196, 255, 0.55);
+      background: rgba(124, 196, 255, 0.18);
+      color: #9cd4ff;
+    }
+
     /* Landscape mode optimization on mobile devices */
     @media (orientation: landscape) and (max-height: 520px) {
       .top-hud {
@@ -453,7 +459,7 @@
       <div class="meters-row">
         <div class="meter-wrap">
           <div class="meter-label">
-            <span>Left Ear (Fork)</span>
+            <span id="leftMeterLabel">Left Ear (Fork)</span>
           </div>
           <div class="meter-track">
             <div id="leftMeter" class="meter-fill"></div>
@@ -462,7 +468,7 @@
 
         <div class="meter-wrap">
           <div class="meter-label">
-            <span>Right Ear (Spoon)</span>
+            <span id="rightMeterLabel">Right Ear (Spoon)</span>
           </div>
           <div class="meter-track">
             <div id="rightMeter" class="meter-fill"></div>
@@ -507,6 +513,10 @@
 
       <button id="audioBtn" class="muted">
         <span>🔇</span> Muted
+      </button>
+
+      <button id="swapStereoBtn" title="Swap Left and Right Audio Channels (Headphones)">
+        <span>⇄</span> <span id="swapStereoText">Stereo: L/R</span>
       </button>
 
       <button id="flipCamBtn" title="Flip Camera">

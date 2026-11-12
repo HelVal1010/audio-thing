@@ -15,6 +15,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const recordText = document.getElementById('recordText');
   const recordTimer = document.getElementById('recordTimer');
   const audioBtn = document.getElementById('audioBtn');
+  const swapStereoBtn = document.getElementById('swapStereoBtn');
+  const swapStereoText = document.getElementById('swapStereoText');
   const flipCamBtn = document.getElementById('flipCamBtn');
   const hideUiBtn = document.getElementById('hideUiBtn');
   const restoreUiBtn = document.getElementById('restoreUiBtn');
@@ -27,6 +29,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const diagList = document.getElementById('diagList');
   const leftMeter = document.getElementById('leftMeter');
   const rightMeter = document.getElementById('rightMeter');
+  const leftMeterLabel = document.getElementById('leftMeterLabel');
+  const rightMeterLabel = document.getElementById('rightMeterLabel');
   const harmonyCircle = document.getElementById('harmonyCircle');
 
   // Instances
@@ -120,6 +124,38 @@ document.addEventListener('DOMContentLoaded', async () => {
       audioBtn.innerHTML = '<span>🔊</span> Audio On';
     }
   };
+
+  // Stereo Swap (Left <-> Right) Handler
+  function updateStereoUI() {
+    const flipped = DeskAudio.isFlipped();
+    if (swapStereoBtn) {
+      if (flipped) {
+        swapStereoBtn.classList.add('swapped');
+        if (swapStereoText) swapStereoText.textContent = 'Stereo: R/L';
+        swapStereoBtn.title = 'Stereo Swapped (Left: Spoon, Right: Fork) - Tap to restore';
+      } else {
+        swapStereoBtn.classList.remove('swapped');
+        if (swapStereoText) swapStereoText.textContent = 'Stereo: L/R';
+        swapStereoBtn.title = 'Stereo Normal (Left: Fork, Right: Spoon) - Tap to swap';
+      }
+    }
+    if (leftMeterLabel) {
+      leftMeterLabel.textContent = flipped ? 'Left Ear (Spoon)' : 'Left Ear (Fork)';
+    }
+    if (rightMeterLabel) {
+      rightMeterLabel.textContent = flipped ? 'Right Ear (Fork)' : 'Right Ear (Spoon)';
+    }
+  }
+
+  if (swapStereoBtn) {
+    swapStereoBtn.onclick = () => {
+      ensureAudio();
+      const next = !DeskAudio.isFlipped();
+      DeskAudio.setFlip(next);
+      updateStereoUI();
+      DeskAudio.testStereo(); // Plays quick left-then-right acoustic confirmation chime
+    };
+  }
 
   flipCamBtn.onclick = () => {
     currentFacing = (currentFacing === 'environment' ? 'user' : 'environment');
@@ -437,7 +473,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
 
       // 3. Get current state & draw overlays
-      const state = tracker.getState();
+      const isFlipped = DeskAudio.isFlipped();
+      const state = tracker.getState(isFlipped);
       drawHUD(state);
 
       // 4. Update Audio Engine
@@ -447,12 +484,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       fpsTag.textContent = `${state.fps} FPS`;
       inferTag.textContent = `${state.inferTime} ms`;
 
-      // Meters
-      leftMeter.style.width = `${state.e_left * 100}%`;
-      leftMeter.style.background = `hsl(${120 - 120 * state.e_left} 70% 50%)`;
+      // Ear meters reflect what is heard in each respective ear
+      const leftVal = isFlipped ? state.e_right : state.e_left;
+      const rightVal = isFlipped ? state.e_left : state.e_right;
 
-      rightMeter.style.width = `${state.e_right * 100}%`;
-      rightMeter.style.background = `hsl(${120 - 120 * state.e_right} 70% 50%)`;
+      leftMeter.style.width = `${leftVal * 100}%`;
+      leftMeter.style.background = `hsl(${120 - 120 * leftVal} 70% 50%)`;
+
+      rightMeter.style.width = `${rightVal * 100}%`;
+      rightMeter.style.background = `hsl(${120 - 120 * rightVal} 70% 50%)`;
 
       // Harmony progress ring
       const circ = 2 * Math.PI * 26; // r=26

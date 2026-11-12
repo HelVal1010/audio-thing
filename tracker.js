@@ -422,9 +422,12 @@ class TablewareTracker {
   }
 
   // Diagnostic state for HUD & Audio
-  getState() {
+  getState(isFlipped = false) {
     const reasons = [];
     let status = 'DISHARMONY';
+
+    const forkEar = isFlipped ? 'Right Ear' : 'Left Ear';
+    const spoonEar = isFlipped ? 'Left Ear' : 'Right Ear';
 
     if (this.tension <= 0.05 && this.fork.present && this.spoon.present) {
       status = 'HARMONIOUS';
@@ -433,10 +436,10 @@ class TablewareTracker {
     } else {
       status = 'DISHARMONY';
       if (!this.fork.present) reasons.push('Fork not detected on the left.');
-      else if (!this.fork.aligned) reasons.push(`Fork tilted ${this.fork.delta_deg}° off-axis (causing dissonance in Left Ear).`);
+      else if (!this.fork.aligned) reasons.push(`Fork tilted ${this.fork.delta_deg}° off-axis (causing dissonance in ${forkEar}).`);
 
       if (!this.spoon.present) reasons.push('Spoon not detected on the right.');
-      else if (!this.spoon.aligned) reasons.push(`Spoon tilted ${this.spoon.delta_deg}° off-axis (causing dissonance in Right Ear).`);
+      else if (!this.spoon.aligned) reasons.push(`Spoon tilted ${this.spoon.delta_deg}° off-axis (causing dissonance in ${spoonEar}).`);
     }
 
     return {
